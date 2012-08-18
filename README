@@ -1,6 +1,6 @@
-A C++ naughts and crosses game using wxWidgets.
+A simple Naughts and crosses program using wxWidgets and logging to a sqlite database.
 
-Structure:
+Program structure:
               1         1          9
 Controller -|-> Game ---|-> Board --> Square -|
             |     |1    |                     |0..1
