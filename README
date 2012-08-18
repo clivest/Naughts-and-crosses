@@ -1,0 +1,23 @@
+A C++ naughts and crosses game using wxWidgets.
+
+Structure:
+              1         1          9
+Controller -|-> Game ---|-> Board --> Square -|
+            |     |1    |                     |0..1
+            |1    V     |              0..9   V
+            |->sqlite3  |-----------------> Piece
+                                             /\
+                                             --
+                                             |
+                                          --------
+                                          |      |
+                                          V      V
+                                       Naught   Cross
+
+Notes:
+* Controller is the wxApp derived class. It simply creates the db connection and the game. When the application is exited, it destroys the sqlite connection
+* Game controls the progress of the game.
+* Board is a glcanvas derived class. When clicked, it notifies Game, and updates the display as appropriate.
+* Piece instances are created as necessary
+* Moves are logged to the sqlite3 for future analysis
+
