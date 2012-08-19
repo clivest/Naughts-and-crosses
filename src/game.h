@@ -3,6 +3,8 @@
 
 #include "wx/wx.h"
 #include <sqlite3.h>
+#include <boost/signals2.hpp>
+#include <boost/thread.hpp>
 
 enum GameState {
 	//same as in db table outcomes
@@ -15,6 +17,7 @@ enum GameState {
 
 class Board;
 class Piece;
+class DbComms;
 
 class Game : public wxFrame {
 	private:
@@ -23,12 +26,9 @@ class Game : public wxFrame {
 		wxTimer *timer;
 		const wxSize& size;
 		
-		sqlite3 *db;
-		sqlite3_stmt *newGame;
-		sqlite3_stmt *updateGame;
-		sqlite3_stmt *newMove;
-		
-		sqlite3_int64 gameId;
+		DbComms *dbComms;
+		boost::thread t;
+
 		int moveNum;
 		GameState state;
 		
@@ -36,6 +36,8 @@ class Game : public wxFrame {
 		void logNewGameToDB();
 	public:
 		Game(sqlite3 *db, const wxString& title, const wxPoint& pos, const wxSize& size);
+		~Game();
+		void endThread();
 		Piece *newPiece(int i, int j);
 		void updateStatus();
 		bool inProgress();

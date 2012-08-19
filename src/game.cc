@@ -3,9 +3,7 @@
 #include "piece.h"
 #include "naught.h"
 #include "cross.h"
-#include <sqlite3.h>
-#include <sstream>
-#include <iostream>
+#include "dbcomms.h"
 #include "wx/wx.h"
 
 BEGIN_EVENT_TABLE(Game, wxFrame)
@@ -13,23 +11,38 @@ BEGIN_EVENT_TABLE(Game, wxFrame)
 END_EVENT_TABLE()
 
 Game::Game(sqlite3 *db, const wxString& title, const wxPoint& pos, const wxSize& size)
-	: wxFrame(NULL, -1, title, pos, size, wxDEFAULT_FRAME_STYLE & ~wxRESIZE_BORDER), size(size), timer(new wxTimer(this, 1)), db(db), moveNum(1) {
-	//prep db statements
-	//newGame = new sqlite3_stmt();
-	//updateGame = new sqlite3_stmt();
-	//newMove = new sqlite3_stmt();
-	sqlite3_prepare_v2(db, "INSERT INTO game (outcomeid) values(1);", -1, &newGame, NULL);
-	sqlite3_prepare_v2(db, "UPDATE game SET outcomeid = @STA WHERE id = @GID", -1, &updateGame, NULL);
-	sqlite3_prepare_v2(db, "INSERT INTO move (gameid, playerid, movenum, x, y) VALUES(@GID, @PID, @NUM, @XX, @YY);", -1, &newMove, NULL);
+	: wxFrame(NULL, -1, title, pos, size, wxDEFAULT_FRAME_STYLE & ~wxRESIZE_BORDER), size(size), timer(new wxTimer(this, 1)), moveNum(1), dbComms(new DbComms(db)) {
+	// launches a thread that handles communication with a database
+	t = boost::thread(boost::bind(&DbComms::loop, dbComms));
 	
-	logNewGameToDB();
-	
+	//log the new game to the db on the worker thread
+	dbComms->newGame();
+
 	board = new Board(this, size);
-	//no pieces yet
+	for (int i = 0; i < 3; i++)
+		for (int j = 0; j < 3; j++)
+			pieces[i][j] = NULL;
 	
 	state = NaughtNext;
 	CreateStatusBar();
 	updateStatus();
+}
+
+Game::~Game() {
+	//delete pieces
+	for (int i = 0; i < 3; i++)
+		for (int j = 0; j < 3; j++)
+			wxDELETE(pieces[i][j]);
+	//delete timer
+	delete timer;
+}
+
+void Game::endThread() {
+	//end thread
+	dbComms->workFinished();
+	t.join();
+	//delete database comms
+	delete dbComms;
 }
 
 void Game::OnTimer(wxTimerEvent& event) {
@@ -53,17 +66,7 @@ Piece *Game::newPiece(const int i, const int j) {
 	state = (GameState)!state;
 		
 	//log move to db
-	sqlite3_bind_int(newMove, 1, gameId);
-	sqlite3_bind_int(newMove, 2, newPiece->getPlayerId());
-	sqlite3_bind_int(newMove, 3, moveNum++);
-	sqlite3_bind_int(newMove, 4, i);
-	sqlite3_bind_int(newMove, 5, j);
-	if (sqlite3_step(newMove) != SQLITE_DONE) {
-		std::cout << "Can't insert into move table: " << sqlite3_errmsg(db) << std::endl;
-		throw "Can't insert into move table";
-	}
-	sqlite3_clear_bindings(newMove);
-    sqlite3_reset(newMove);
+	dbComms->newMove(newPiece->getPlayerId(), moveNum++, i, j);
 	
 	bool gameOver = checkIf3InRow(i, j);
 	if (gameOver) {
@@ -84,17 +87,8 @@ Piece *Game::newPiece(const int i, const int j) {
 			state = Draw;
 	}
 	
-	if (gameOver) {
-		//update outcome of game in db
-		sqlite3_bind_int(updateGame, 1, state);
-		sqlite3_bind_int64(updateGame, 2, gameId);
-		if (sqlite3_step(updateGame) != SQLITE_DONE) {
-			std::cout << "Can't update game table: " << sqlite3_errmsg(db) << std::endl;
-			throw "Can't update game table";
-		}
-		sqlite3_clear_bindings(updateGame);
-        sqlite3_reset(updateGame);
-	}
+	if (gameOver)
+        dbComms->updateGame(state);
 	
 	updateStatus();
 	return newPiece;
@@ -184,19 +178,9 @@ void Game::restart() {
 		for (int j = 0; j < 3; j++)
 			wxDELETE(pieces[i][j]);
 	
-	logNewGameToDB();
+	dbComms->newGame();
 	//reset state
 	state = NaughtNext;
 	moveNum = 1;
 	updateStatus();
-}
-
-void Game::logNewGameToDB() {
-	//log new game to database. In progress
-	if (sqlite3_step(newGame) != SQLITE_DONE) {
-		std::cout << "Can't insert into game table: " << sqlite3_errmsg(db) << std::endl;
-		throw "Can't insert into game table";
-	}
-	gameId = sqlite3_last_insert_rowid(db);
-	sqlite3_reset(newGame);
 }

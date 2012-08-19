@@ -6,7 +6,7 @@
 #include <string>
 
 bool Controller::OnInit() {
-	//database
+	//database setup
 	if (sqlite3_open("db/naughts_and_crosses.db", &db)){
 		std::cout << "Can't open database: " << sqlite3_errmsg(db) << std::endl;
 		sqlite3_close(db);
@@ -19,7 +19,7 @@ bool Controller::OnInit() {
 		return false;
 	}
 	
-	Game *game = new Game(db, _("Naughts and crosses"), wxDefaultPosition, wxSize(350, 350));
+	game = new Game(db, _("Naughts and crosses"), wxDefaultPosition, wxSize(350, 350));
 	game->Show(true);
 	SetTopWindow(game);
 	return true;
@@ -27,6 +27,7 @@ bool Controller::OnInit() {
 
 int Controller::OnExit() {
 	int rc = wxApp::OnExit();
+	game->endThread();
 	sqlite3_close(db);
 	return rc;
 }
